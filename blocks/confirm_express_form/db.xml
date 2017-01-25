@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema
+  xmlns="http://www.concrete5.org/doctrine-xml/0.5"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.concrete5.org/doctrine-xml/0.5 http://concrete5.github.io/doctrine-xml/doctrine-xml-0.5.xsd">
+
+  <table name="btConfirmExpressForm">
+    <field name="bID" type="integer">
+      <unsigned/>
+      <key/>
+    </field>
+    <field name="exFormID" type="guid">
+    </field>
+    <field name="submitLabel" type="string" size="255">
+      <default value="Submit"/>
+    </field>
+    <field name="sendLabel" type="string" size="255">
+      <default value="Send"/>
+    </field>
+    <field name="subjectAdmin" type="string" size="255"></field>
+    <field name="subjectUser" type="string" size="255"></field>
+    <field name="fromAddressToUser" type="string" size="255"></field>
+    <field name="fromNameToUser" type="string" size="255"></field>
+    <field name="thankyouMsg" type="text" size="65535"/>
+    <field name="preambleAdmin" type="text" size="65535"/>
+    <field name="signatureAdmin" type="text" size="65535"/>
+    <field name="preambleUser" type="text" size="65535"/>
+    <field name="signatureUser" type="text" size="65535"/>
+    <field name="notifyMeOnSubmission" type="boolean">
+      <default value="0"/>
+      <notnull/>
+    </field>
+    <field name="recipientEmail" type="string" size="255"/>
+    <field name="displayCaptcha" type="integer">
+      <default value="1"/>
+    </field>
+    <field name="redirectCID" type="integer">
+      <default value="0"/>
+    </field>
+    <field name="replyToEmailControlID" type="string">
+    </field>
+    <field name="addFilesToSet" type="integer">
+      <default value="0"/>
+    </field>
+  </table>
+
+</schema>
