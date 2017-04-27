@@ -160,18 +160,19 @@ class Controller extends BlockController
                 ----------------------- */
                 if(is_object($request->files)){
                     $files = $request->files->get('akID');
+                    if($files){
+                        foreach($files as $ak_id => $ak_file){
+                            $file_data = $ak_file['value'];
+                            if(!$file_data || !file_exists($file_data->getPathname())) continue;
 
-                    foreach($files as $ak_id => $ak_file){
-                        $file_data = $ak_file['value'];
-                        if(!$file_data || !file_exists($file_data->getPathname())) continue;
+                            $path = md5_file($file_data->getPathname()) . '.' . $file_data->guessExtension();
 
-                        $path = md5_file($file_data->getPathname()) . '.' . $file_data->guessExtension();
-
-                        $akID[$ak_id]['file']['tmp_name'] = $this->get_tmp_dir().$path;
-                        $akID[$ak_id]['file']['origin_name'] = $file_data->getClientOriginalName();
-                        $akID[$ak_id]['file']['src'] = DIR_REL.str_replace(DIR_BASE, '',$this->get_tmp_dir().$path);
-                        $akID[$ak_id]['file']['extention'] = $file_data->guessExtension();
-                        $file_data->move($this->get_tmp_dir(), $path);
+                            $akID[$ak_id]['file']['tmp_name'] = $this->get_tmp_dir().$path;
+                            $akID[$ak_id]['file']['origin_name'] = $file_data->getClientOriginalName();
+                            $akID[$ak_id]['file']['src'] = DIR_REL.str_replace(DIR_BASE, '',$this->get_tmp_dir().$path);
+                            $akID[$ak_id]['file']['extention'] = $file_data->guessExtension();
+                            $file_data->move($this->get_tmp_dir(), $path);
+                        }
                     }
                 }
                 $requestArray['akID'] = $akID;
