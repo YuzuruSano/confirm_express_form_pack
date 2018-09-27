@@ -95,7 +95,7 @@
             <?php echo $form->label('subjectUser', t('Subject to User'))?>
             <?php echo $form->text('subjectUser', $subjectUser)?>
         </div>
-        <div class="form-group">
+       <!--<div class="form-group">
             <?php echo $form->label('fromNameToUser', t('Form Name to User'))?>
             <?php echo $form->text('fromNameToUser', $fromNameToUser)?>
         </div>
@@ -103,7 +103,7 @@
         <div class="form-group">
             <?php echo $form->label('fromAddressToUser', t('Form Address to User'))?>
             <?php echo $form->text('fromAddressToUser', $fromAddressToUser)?>
-        </div>
+        </div>-->
 
         <div class="form-group">
             <?php echo $form->label('submitLabel', t('Comfirm Button Label'))?>

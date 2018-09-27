@@ -15,15 +15,25 @@ use Concrete\Core\Entity\Express\Entry;
 use Concrete\Core\Entity\Express\FieldSet;
 use Concrete\Core\Entity\Express\Form;
 use Concrete\Core\Express\Attribute\AttributeKeyHandleGenerator;
-use Concrete\Core\Express\Entry\Manager;
+use Concrete\Core\Express\Controller\ControllerInterface;
+use Concrete\Core\Express\Entry\Notifier\Notification\FormBlockSubmissionEmailNotification;
+use Concrete\Core\Express\Entry\Notifier\Notification\FormBlockSubmissionNotification;
+use Concrete\Core\Express\Entry\Notifier\NotificationInterface;
+use Concrete\Core\Express\Entry\Notifier\NotificationProviderInterface;
+use Concrete\Core\Express\Form\Context\FrontendFormContext;
 use Concrete\Core\Express\Form\Control\Type\EntityPropertyType;
 use Concrete\Core\Express\Form\Control\SaveHandler\SaveHandlerInterface;
-use Concrete\Core\Express\Form\Validator;
+use Concrete\Core\Express\Form\Processor\ProcessorInterface;
+use Concrete\Core\Express\Form\Validator\Routine\CaptchaRoutine;
+use Concrete\Core\Express\Form\Validator\ValidatorInterface;
 use Concrete\Core\Express\Generator\EntityHandleGenerator;
 use Concrete\Core\File\FileProviderInterface;
+use Concrete\Core\File\Filesystem;
 use Concrete\Core\File\Set\Set;
+use Concrete\Core\Form\Context\ContextFactory;
 use Concrete\Core\Http\ResponseAssetGroup;
 use Concrete\Core\Routing\Redirect;
+use Concrete\Core\Support\Facade\Express;
 use Concrete\Core\Tree\Node\Node;
 use Concrete\Core\Tree\Node\NodeType;
 use Concrete\Core\Tree\Node\Type\Category;
@@ -111,15 +121,22 @@ class Controller extends BlockController
             $entityManager = \Core::make('database/orm')->entityManager();
             $form = $this->getFormEntity();
             if (is_object($form)) {
-                $e = \Core::make('error');
-                $validator = new Validator($e, $this->request);
-                $validator->validate($form);
+                $express = \Core::make('express');
+                $entity = $form->getEntity();
+                /**
+                 * @var $controller ControllerInterface
+                 */
+                $controller = $express->getEntityController($entity);
+                $processor = $controller->getFormProcessor();
+                $validator = $processor->getValidator($this->request);
                 if ($this->displayCaptcha) {
-                    $captcha = \Core::make('helper/validation/captcha');
-                    if (!$captcha->check()) {
-                        $e->add(t('Incorrect captcha code.'));
-                    }
+                    $validator->addRoutine(new CaptchaRoutine(\Core::make('helper/validation/captcha')));
                 }
+
+                $validator->validate($form, ProcessorInterface::REQUEST_TYPE_ADD);
+
+                $e = $validator->getErrorList();
+
                 $this->set('error', $e);
             }
 
@@ -184,7 +201,7 @@ class Controller extends BlockController
             送信
             =============================================== */
             if (isset($e) && !$e->has() && $request->get('mode') == 'send') {
-                $manager = new Manager($entityManager, $this->request);
+                $manager = $controller->getEntryManager($this->request);
                 $entry = $manager->addEntry($entity);
                 /* htmlファイルアップローダーは処理を分ける
                 ----------------------- */
@@ -254,7 +271,6 @@ class Controller extends BlockController
                         }
                     }
                 }
-
                 if ($this->notifyMeOnSubmission) {
                     if (\Config::get('concrete.email.form_block.address') && strstr(\Config::get('concrete.email.form_block.address'), '@')) {
                         $formFormEmailAddress = \Config::get('concrete.email.form_block.address');
@@ -264,6 +280,10 @@ class Controller extends BlockController
                     }
 
                     $replyToEmailAddress = $formFormEmailAddress;
+                    $l = new Logger('My-Channel');             // You can filter logs by channel
+
+        // To add a custom message
+        
                     if ($this->replyToEmailControlID) {
                         $control = $entityManager->getRepository('Concrete\Core\Entity\Express\Control\Control')
                             ->findOneById($this->replyToEmailControlID);
@@ -287,7 +307,7 @@ class Controller extends BlockController
                     /* ===============================================
                     メール用パラメータ
                     =============================================== */
-                    $fromAddressToUser = $this->fromAddressToUser;
+                    //$fromAddressToUser = $this->fromAddressToUser;
                     $fromNameToUser = $this->fromNameToUser;
                     $subjectAdmin = $this->subjectAdmin;
                     $subjectUser = $this->subjectUser;
@@ -321,17 +341,18 @@ class Controller extends BlockController
                     $mh = null;
                     $mh = \Core::make('helper/mail');
                     $mh->to($replyToEmailAddress);
-                    if($fromAddressToUser && $fromNameToUser){
-                        $mh->from($fromAddressToUser,$fromNameToUser);
-                    }else{
-                        $mh->from($recipientEmail);
-                    }
+                    // if($fromAddressToUser && $fromNameToUser){
+                    //     $mh->from($fromAddressToUser,$fromNameToUser);
+                    // }else{
+                    //     $mh->from($this->recipientEmail);
+                    // }
                     $mh->addParameter('entity', $entity);
                     $mh->addParameter('formName', $formName);
                     $mh->addParameter('attributes', $values);
                     $mh->addParameter('preambleUser', $preambleUser);
                     $mh->addParameter('signatureUser', $signatureUser);
                     $mh->load('block_express_form_submission_user',$pkgHandle);
+
                     if($subjectUser){
                         $mh->setSubject($subjectUser);
                     }else{
@@ -876,67 +897,86 @@ class Controller extends BlockController
     public function view()
     {
         $form = $this->getFormEntity();
-        $app = \Core::make('app');
-        if (is_object($form)) {
-            $this->set('expressForm', $form);
-        }
-        if ($this->displayCaptcha) {
-            $this->requireAsset('css', 'core/frontend/captcha');
-        }
-        $this->requireAsset('css', 'core/frontend/errors');
-        /* ===============================================
-        フォーム情報ををバラで取得する
-        =============================================== */
-        //各項目
-        $af = Core::make('helper/form/attribute');
-        $entity = $form->getEntity();
-        $controls = $form->getControls();
-        $controlSet = [];
-        foreach($controls as $control){
-            $value = $af->setAttributeObject($control);
-            $key = $control->getAttributeKey();
-            $type = $key->getAttributeType();
-            $handle = $key->getAttributeTypeHandle();
-
-            $obj = new \stdClass();
-            $obj->question = $control->getDisplayLabel();
-            $obj->isRequired = $control->isRequired();
-            $obj->showControlRequired = true;
-            $obj->showControlName = true;
-            $obj->type = 'attribute_key|' . $type->getAttributeTypeID();
-            $obj->typeDisplayName = $type->getAttributeTypeDisplayName();
-            $obj->controlID = $control->getID();
-            $obj->keyID = $key->getAttributeKeyID();
-            $obj->typeContent = $key->render('composer', $value, true);
-
-            //select系属性はオプションとオプションIDももらう。
-            $options = [];
-            $akc = $key->getController();
-            if($handle == 'select'){
-                $optionList = $akc->getOptions();
-                if($optionList){
-                    foreach($optionList as $option){
-                        $options[$option->getSelectAttributeOptionID()] = $option->getSelectAttributeOptionDisplayValue();
-                    }
-                    $obj->hasOption = true;
-                    $obj->options = $options;
-                }else{
-                    $obj->hasOption = false;
+         if ($form) {
+            $entity = $form->getEntity();
+            if ($entity) {
+                $express = \Core::make('express');
+                $controller = $express->getEntityController($entity);
+                $factory = new ContextFactory($controller);
+                $context = $factory->getContext(new FrontendFormContext());
+                $renderer = new \Concrete\Core\Express\Form\Renderer(
+                    $context,
+                    $form
+                );
+                if (is_object($form)) {
+                    $this->set('expressForm', $form);
                 }
+                if ($this->displayCaptcha) {
+                    $this->requireAsset('css', 'core/frontend/captcha');
+                }
+                $this->requireAsset('css', 'core/frontend/errors');
+                $this->set('renderer', $renderer);
+
+                /* ===============================================
+                フォーム情報ををバラで取得する
+                =============================================== */
+                //各項目
+                $af = Core::make('helper/form/attribute');
+                $entity = $form->getEntity();
+                $controls = $form->getControls();
+                $controlSet = [];
+                foreach($controls as $control){
+                    $value = $af->setAttributeObject($control);
+                    $key = $control->getAttributeKey();
+                    $type = $key->getAttributeType();
+                    $handle = $key->getAttributeTypeHandle();
+
+                    $obj = new \stdClass();
+                    $obj->question = $control->getDisplayLabel();
+                    $obj->isRequired = $control->isRequired();
+                    $obj->showControlRequired = true;
+                    $obj->showControlName = true;
+                    $obj->type = 'attribute_key|' . $type->getAttributeTypeID();
+                    $obj->typeDisplayName = $type->getAttributeTypeDisplayName();
+                    $obj->controlID = $control->getID();
+                    $obj->keyID = $key->getAttributeKeyID();
+                    $obj->typeContent = $key->render('composer', $value, true);
+
+                    //select系属性はオプションとオプションIDももらう。
+                    $options = [];
+                    $akc = $key->getController();
+                    if($handle == 'select'){
+                        $optionList = $akc->getOptions();
+                        if($optionList){
+                            foreach($optionList as $option){
+                                $options[$option->getSelectAttributeOptionID()] = $option->getSelectAttributeOptionDisplayValue();
+                            }
+                            $obj->hasOption = true;
+                            $obj->options = $options;
+                        }else{
+                            $obj->hasOption = false;
+                        }
+                    }
+
+                    $controlSet[] = $obj;
+                }
+
+                $this->set('form_controls',$controlSet);
+                $token = Core::make('token');
+                $utilities['ccm_token'] = $token->generate('express_form');
+                $utilities['express_form_id'] = $form->getID();
+                $this->set('form_utilities',$utilities);
+                $this->set('form_id',$form->getID());
+
+                $this->form_session = \Core::make('session');
+                $this->set_form_sessions();
             }
-
-            $controlSet[] = $obj;
         }
-
-        $this->set('form_controls',$controlSet);
-        $token = Core::make('token');
-        $utilities['ccm_token'] = $token->generate('express_form');
-        $utilities['express_form_id'] = $form->getID();
-        $this->set('form_utilities',$utilities);
-        $this->set('form_id',$form->getID());
-
-        $this->form_session = \Core::make('session');
-        $this->set_form_sessions();
+        if (!isset($renderer)) {
+            $page = $this->block->getBlockCollectionObject();
+            $this->app->make('log')
+                ->warning(t('Form block on page %s (ID: %s) could not be loaded. Its express object or express form no longer exists.', $page->getCollectionName(), $page->getCollectionID()));
+        }
     }
 
     /**

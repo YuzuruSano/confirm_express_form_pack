@@ -10,10 +10,6 @@ For concrete5 8〜 , add confirm flow to express_form block.
   <dd>管理者メール用件名</dd>
   <dt>Subject to User</dt>
   <dd>ユーザーメール用件名</dd>
-  <dt>Form Name to User</dt>
-  <dd>ユーザーメール用送信者名</dd>
-  <dt>Form Address to User</dt>
-  <dd>ユーザーメール用fromアドレス</dd>
   <dt>Comfirm Button Label</dt>
   <dd>確認ボタンのラベル</dd>
   <dt>Send Button Label</dt>
